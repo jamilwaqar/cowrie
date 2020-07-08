@@ -4,12 +4,13 @@
 import struct
 
 from twisted.internet.protocol import ClientFactory, Protocol
+from twisted.protocols.policies import TimeoutMixin
 from twisted.python import log
 
 from cowrie.core.config import CowrieConfig
 
 
-class PoolClient(Protocol):
+class PoolClient(Protocol, TimeoutMixin):
     """
     Represents the connection between a protocol instance (SSH or Telnet) and a Qemu pool
     """
@@ -17,9 +18,19 @@ class PoolClient(Protocol):
         self.factory = factory
         self.parent = None
         self.vm_id = None  # used when disconnecting
+        self.timeout = 10
 
     def connectionMade(self):
         pass
+
+    def timeoutConnection(self):
+        """
+        Make sure all sessions time out eventually.
+        Timeout is reset when authentication succeeds.
+        """
+        log.msg('Timeout reached in PoolClient')
+        self.transport.loseConnection()
+        self.parent.pool_lost_connection()
 
     def set_parent(self, parent):
         self.parent = parent
@@ -34,12 +45,14 @@ class PoolClient(Protocol):
 
         buf = struct.pack('!cII?', b'i', max_vms, vm_unused_timeout, share_guests)
         self.transport.write(buf)
+        self.setTimeout(self.timeout)
 
     def send_vm_request(self, src_ip):
         fmt = '!cH{0}s'.format(len(src_ip))
         buf = struct.pack(fmt, b'r', len(src_ip), src_ip.encode())
 
         self.transport.write(buf)
+        self.setTimeout(self.timeout)
 
     def send_vm_free(self, backend_dirty):
         # free the guest, if we had any guest in this connection to begin with
@@ -49,6 +62,9 @@ class PoolClient(Protocol):
             self.transport.write(buf)
 
     def dataReceived(self, data):
+        # reset the timeout as something was received
+        self.setTimeout(None)
+
         # only makes sense to process data if we have a parent to send it to
         if not self.parent:
             log.err('Parent not set, discarding data from pool')

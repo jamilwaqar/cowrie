@@ -34,7 +34,7 @@ class PoolHandler:
 
         # create a main connection to set params
         d = self.request_interface(initial_setup=True)
-        d.addCallback(self.initial_pool_connection_success)  # TODO error when timeout?
+        d.addCallback(self.initial_pool_connection_success)
         d.addErrback(self.initial_pool_connection_error)
 
     def initial_pool_connection_success(self, client):
@@ -45,7 +45,10 @@ class PoolHandler:
         client.send_initialisation()
 
     def initial_pool_connection_error(self, reason):
-        log.err('Could not connect to VM pool: {0}'.format(reason.value))
+        if not reason:
+            log.err('Could not connect to VM pool')
+        else:
+            log.err('Could not connect to VM pool: {0}'.format(reason.value))
         os._exit(1)
 
     def initialisation_response(self, res_code):
@@ -68,3 +71,6 @@ class PoolHandler:
         # d.addErrback(self.connectToPoolError)
         endpoint = TCP4ClientEndpoint(reactor, self.pool_ip, self.pool_port, timeout=10)
         return endpoint.connect(self.client_factory)
+
+    def pool_lost_connection(self):
+        self.initial_pool_connection_error(None)

@@ -108,6 +108,10 @@ class FrontendTelnetTransport(TelnetTransport, TimeoutMixin, object):
 
             self.connect_to_backend(honey_ip, telnet_port)
 
+    def pool_lost_connection(self):
+        # if we lose connection to the pool, lose it here too
+        self.timeoutConnection()
+
     def backend_connection_error(self, reason):
         log.msg('Connection to honeypot backend refused: {0}. Disconnecting frontend...'.format(reason.value))
         self.transport.loseConnection()
